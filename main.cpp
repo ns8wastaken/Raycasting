@@ -4,9 +4,13 @@
 #include <limits>
 
 #include "src/player.hpp"
+#include "src/maze.cpp"
 
-#define MAP_WIDTH  10
-#define MAP_HEIGHT 10
+
+#define MAZE_WIDTH  10
+#define MAZE_HEIGHT 10
+#define MAZE_SIZE (MAZE_WIDTH * MAZE_HEIGHT)
+
 
 // Player =============================================
 // #define PLAYER_STARTING_POS       Vector2{ 0.5f, 0.5f }
@@ -23,24 +27,21 @@
 #define SCREEN_WIDTH       1000
 #define SCREEN_HEIGHT      800
 #define HALF_SCREEN_HEIGHT (SCREEN_HEIGHT / 2.0f)
-#define SCREEN_RESOLUTION  1000.0f
+#define SCREEN_RESOLUTION  80.0f
 
-#define WALL_WIDTH SCREEN_WIDTH / SCREEN_RESOLUTION
+#define WALL_WIDTH (SCREEN_WIDTH / SCREEN_RESOLUTION)
 
 #define MINIMAP_SIZE 20.0f
 
 #define RADIANS(x) (x * PI/180.0f)
 
 
-typedef std::array<std::array<char, MAP_WIDTH>, MAP_HEIGHT> map_t;
-
-
-void DrawMinimap(Player& player, map_t& map, float size)
+void DrawMinimap(Player& player, Maze<MAZE_WIDTH, MAZE_SIZE>& maze, float size)
 {
     // Draw cells
-    for (std::size_t y = 0; y < MAP_HEIGHT; ++y) {
-        for (std::size_t x = 0; x < MAP_WIDTH; ++x) {
-            if (map[y][x] != 0) {
+    for (std::size_t y = 0; y < MAZE_HEIGHT; ++y) {
+        for (std::size_t x = 0; x < MAZE_WIDTH; ++x) {
+            if (maze.getCellAt(x, y)) {
                 DrawRectangleV({ (float)x * size, (float)y * size }, { size, size }, BLUE);
             } else {
                 DrawRectangleV({ (float)x * size, (float)y * size }, { size, size }, BLACK);
@@ -51,22 +52,22 @@ void DrawMinimap(Player& player, map_t& map, float size)
 
     // Draw player
     Vector2 p_pos = player.pos * size;
-    // Vector2 fov1 = p_pos + Vector2Rotate(player.direction * 2.0f, -RADIANS(PLAYER_FOV) * 0.5f) * size;
-    // Vector2 fov2 = p_pos + Vector2Rotate(player.direction * 2.0f, RADIANS(PLAYER_FOV) * 0.5f) * size;
-    // DrawLineEx(p_pos, fov1, 4, PURPLE);
-    // DrawLineEx(p_pos, fov2, 4, PURPLE);
-    // DrawLineEx(fov1, fov2, 4, PURPLE);
+    Vector2 fov1 = p_pos + Vector2Rotate(player.direction * 2.0f, -RADIANS(PLAYER_FOV) * 0.5f) * size;
+    Vector2 fov2 = p_pos + Vector2Rotate(player.direction * 2.0f, RADIANS(PLAYER_FOV) * 0.5f) * size;
+    DrawLineEx(p_pos, fov1, 4, PURPLE);
+    DrawLineEx(p_pos, fov2, 4, PURPLE);
+    DrawLineEx(fov1, fov2, 4, PURPLE);
 
-    Vector2 cameraOffset = { player.direction.y, -player.direction.x };
-    Vector2 cameraStart = player.pos + cameraOffset;
-    Vector2 cameraEnd = player.pos - cameraOffset;
+    // Vector2 cameraOffset = { player.direction.y, -player.direction.x };
+    // Vector2 cameraStart = player.pos + cameraOffset;
+    // Vector2 cameraEnd = player.pos - cameraOffset;
+    // DrawLineEx(cameraStart * size, cameraEnd * size, 4, PURPLE);
 
-    DrawLineEx(cameraStart * size, cameraEnd * size, 4, PURPLE);
     DrawCircleV(p_pos, size * 0.5f, GREEN);
 }
 
 
-Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, map_t& map)
+Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, Maze<MAZE_WIDTH, MAZE_SIZE>& maze)
 {
     // Current cell in the grid
     int mapX = (int)rayStart.x;
@@ -113,7 +114,7 @@ Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, map_t& map)
             side = true;
         }
 
-        if ((unsigned)mapY < MAP_HEIGHT && (unsigned)mapX < MAP_WIDTH && map[mapY][mapX] != 0) {
+        if ((unsigned)mapY < MAZE_HEIGHT && (unsigned)mapX < MAZE_WIDTH && maze.getCellAt(mapX, mapY) != 0) {
             if (side) {
                 return Vector2{ rayStart.x + (mapY - rayStart.y + (1 - stepY) / 2) / rayDirection.y * rayDirection.x, (float)(mapY + (stepY <= 0)) };
             } else {
@@ -126,7 +127,7 @@ Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, map_t& map)
 }
 
 
-void RaycastWalls(Player& player, map_t& map)
+void RaycastWalls(Player& player, Maze<MAZE_WIDTH, MAZE_SIZE>& map)
 {
     Vector2 rayDirection = Vector2Rotate(player.direction, -RADIANS(PLAYER_FOV) * 0.5f);
     for (float i = 0; i < SCREEN_RESOLUTION; ++i) {
@@ -162,18 +163,8 @@ int main()
 
     Player player(PLAYER_STARTING_POS, PLAYER_STARTING_DIRECTION, PLAYER_FOV);
 
-    map_t map = {
-        { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 1, 1, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, //
-          { 0, 0, 0, 0, 1, 1, 1, 1, 1, 0 }, //
-          { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
-    };
+    Maze<MAZE_WIDTH, MAZE_SIZE> maze;
+    maze.setCell(1, 3, 1);
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
@@ -189,21 +180,21 @@ int main()
         }
         if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) {
             player.walk(PLAYER_WALK_SPEED * deltaTime);
-            if (map[(int)player.pos.y][(int)player.pos.x])
+            if (maze.getCellAt((int)player.pos.x, (int)player.pos.y))
                 player.walk(-PLAYER_WALK_SPEED * deltaTime);
         }
         if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) {
             player.walk(-PLAYER_WALK_SPEED * deltaTime);
-            if (map[(int)player.pos.y][(int)player.pos.x])
+            if (maze.getCellAt((int)player.pos.x, (int)player.pos.y))
                 player.walk(PLAYER_WALK_SPEED * deltaTime);
         }
 
         // Floor ?
         // DrawRectangle(0, HALF_SCREEN_HEIGHT, SCREEN_WIDTH, HALF_SCREEN_HEIGHT, WHITE);
+        RaycastWalls(player, maze);
 
-        RaycastWalls(player, map);
+        DrawMinimap(player, maze, MINIMAP_SIZE);
 
-        DrawMinimap(player, map, MINIMAP_SIZE);
 
         EndDrawing();
     }
