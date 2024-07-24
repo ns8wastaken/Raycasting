@@ -7,36 +7,41 @@
 #include "src/maze.cpp"
 
 
-#define MAZE_WIDTH  10
-#define MAZE_HEIGHT 10
-#define MAZE_SIZE (MAZE_WIDTH * MAZE_HEIGHT)
+// Must be odd numbers
+#define MAZE_WIDTH  21
+#define MAZE_HEIGHT 21
 
 
 // Player =============================================
-// #define PLAYER_STARTING_POS       Vector2{ 0.5f, 0.5f }
-#define PLAYER_STARTING_POS       Vector2{ 6.5f, 4.0f }
-#define PLAYER_STARTING_DIRECTION Vector2{ 0.0f, 1.0f }
+#define PLAYER_STARTING_POS       Vector2{ 0.5f, 0.5f }
+#define PLAYER_STARTING_DIRECTION Vector2{ 0.5f, 0.5f }
 #define PLAYER_FOV                90.0f
 
 #define PLAYER_ROTATE_AMOUNT 2.0f
 #define PLAYER_WALK_SPEED    1.5f
 // ====================================================
 
-#define RENDER_DISTANCE 20
+#define RENDER_DISTANCE 6
 
 #define SCREEN_WIDTH       1000
 #define SCREEN_HEIGHT      800
 #define HALF_SCREEN_HEIGHT (SCREEN_HEIGHT / 2.0f)
-#define SCREEN_RESOLUTION  80.0f
+#define SCREEN_RESOLUTION  100.0f
 
 #define WALL_WIDTH (SCREEN_WIDTH / SCREEN_RESOLUTION)
 
-#define MINIMAP_SIZE 20.0f
+#define MINIMAP_SIZE 10.0f
 
 #define RADIANS(x) (x * PI/180.0f)
 
 
-void DrawMinimap(Player& player, Maze<MAZE_WIDTH, MAZE_SIZE>& maze, float size)
+bool coordsAreInMaze(Vector2& coords)
+{
+    return (coords.x < MAZE_WIDTH && coords.x >= 0 && coords.y < MAZE_HEIGHT && coords.y >= 0);
+}
+
+
+void DrawMinimap(Player& player, Maze<MAZE_WIDTH, MAZE_HEIGHT>& maze, float size)
 {
     // Draw cells
     for (std::size_t y = 0; y < MAZE_HEIGHT; ++y) {
@@ -58,16 +63,11 @@ void DrawMinimap(Player& player, Maze<MAZE_WIDTH, MAZE_SIZE>& maze, float size)
     DrawLineEx(p_pos, fov2, 4, PURPLE);
     DrawLineEx(fov1, fov2, 4, PURPLE);
 
-    // Vector2 cameraOffset = { player.direction.y, -player.direction.x };
-    // Vector2 cameraStart = player.pos + cameraOffset;
-    // Vector2 cameraEnd = player.pos - cameraOffset;
-    // DrawLineEx(cameraStart * size, cameraEnd * size, 4, PURPLE);
-
     DrawCircleV(p_pos, size * 0.5f, GREEN);
 }
 
 
-Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, Maze<MAZE_WIDTH, MAZE_SIZE>& maze)
+Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, Maze<MAZE_WIDTH, MAZE_HEIGHT>& maze)
 {
     // Current cell in the grid
     int mapX = (int)rayStart.x;
@@ -101,7 +101,7 @@ Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, Maze<MAZE_WI
         sideDist.y = (mapY + 1.0f - rayStart.y) * deltaDist.y;
     }
 
-    bool side; // Was a NS or a EW wall hit?
+    bool side; // NS or EW wall hit
     for (int i = 0; i < RENDER_DISTANCE; ++i) {
         // Go to next cell in either x-direction or y-direction
         if (sideDist.x < sideDist.y) {
@@ -120,6 +120,12 @@ Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, Maze<MAZE_WI
             } else {
                 return Vector2{ (float)(mapX + (stepX <= 0)), rayStart.y + (mapX - rayStart.x + (1 - stepX) / 2) / rayDirection.x * rayDirection.y };
             }
+        } else if (mapY == MAZE_HEIGHT || mapY == -1 || mapX == MAZE_WIDTH || mapX == -1) {
+            if (side) {
+                return Vector2{ rayStart.x + (mapY - rayStart.y + (1 - stepY) / 2) / rayDirection.y * rayDirection.x, (float)(mapY + (stepY <= 0)) };
+            } else {
+                return Vector2{ (float)(mapX + (stepX <= 0)), rayStart.y + (mapX - rayStart.x + (1 - stepX) / 2) / rayDirection.x * rayDirection.y };
+            }
         }
     }
 
@@ -127,11 +133,11 @@ Vector2 rayIntersectPoint(Vector2& rayStart, Vector2& rayDirection, Maze<MAZE_WI
 }
 
 
-void RaycastWalls(Player& player, Maze<MAZE_WIDTH, MAZE_SIZE>& map)
+void RaycastWalls(Player& player, Maze<MAZE_WIDTH, MAZE_HEIGHT>& maze)
 {
     Vector2 rayDirection = Vector2Rotate(player.direction, -RADIANS(PLAYER_FOV) * 0.5f);
     for (float i = 0; i < SCREEN_RESOLUTION; ++i) {
-        Vector2 rayHit = rayIntersectPoint(player.pos, rayDirection, map);
+        Vector2 rayHit = rayIntersectPoint(player.pos, rayDirection, maze);
         rayDirection = Vector2Rotate(rayDirection, RADIANS(PLAYER_FOV) / (SCREEN_RESOLUTION - 1));
 
         if (rayHit.x != -1.0f && rayHit.y != -1.0f) {
@@ -141,19 +147,6 @@ void RaycastWalls(Player& player, Maze<MAZE_WIDTH, MAZE_SIZE>& map)
             DrawRectangleV({ i * WALL_WIDTH, HALF_SCREEN_HEIGHT - wallHeight * 0.5f }, { WALL_WIDTH, wallHeight }, Color{ 0, n, n, 255 });
         }
     }
-
-    // Vector2 cameraOffset = { player.direction.y, -player.direction.x };
-    // for (float i = 0; i < SCREEN_RESOLUTION; ++i) {
-    //     Vector2 rayStart = Vector2Lerp(player.pos + cameraOffset, player.pos - cameraOffset, i / (SCREEN_RESOLUTION - 1));
-    //     Vector2 rayHit = rayIntersectPoint(rayStart, player.direction, map);
-
-    //     if (rayHit.x != -1.0f && rayHit.y != -1.0f) {
-    //         float rayDist = Vector2Distance(rayStart, rayHit);
-    //         float wallHeight = HALF_SCREEN_HEIGHT / rayDist;
-    //         unsigned char n = (unsigned char)(255 - (rayDist / RENDER_DISTANCE * 255));
-    //         DrawRectangleV({ i * WALL_WIDTH, HALF_SCREEN_HEIGHT - wallHeight * 0.5f }, { WALL_WIDTH, wallHeight }, Color{ 0, n, n, 255 });
-    //     }
-    // }
 }
 
 
@@ -163,8 +156,9 @@ int main()
 
     Player player(PLAYER_STARTING_POS, PLAYER_STARTING_DIRECTION, PLAYER_FOV);
 
-    Maze<MAZE_WIDTH, MAZE_SIZE> maze;
-    maze.setCell(1, 3, 1);
+    Maze<MAZE_WIDTH, MAZE_HEIGHT> maze;
+
+    maze.generateMaze(1);
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
@@ -180,13 +174,21 @@ int main()
         }
         if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)) {
             player.walk(PLAYER_WALK_SPEED * deltaTime);
-            if (maze.getCellAt((int)player.pos.x, (int)player.pos.y))
+            if (coordsAreInMaze(player.pos)) {
+                if (maze.getCellAt((int)player.pos.x, (int)player.pos.y))
+                    player.walk(-PLAYER_WALK_SPEED * deltaTime);
+            } else {
                 player.walk(-PLAYER_WALK_SPEED * deltaTime);
+            }
         }
         if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) {
             player.walk(-PLAYER_WALK_SPEED * deltaTime);
-            if (maze.getCellAt((int)player.pos.x, (int)player.pos.y))
+            if (coordsAreInMaze(player.pos)) {
+                if (maze.getCellAt((int)player.pos.x, (int)player.pos.y))
+                    player.walk(PLAYER_WALK_SPEED * deltaTime);
+            } else {
                 player.walk(PLAYER_WALK_SPEED * deltaTime);
+            }
         }
 
         // Floor ?
